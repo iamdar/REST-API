@@ -14,16 +14,30 @@ def sql(query):
         db_name = os.getenv("DB_NAME")
         db_username = os.getenv("DB_USERNAME")
         db_password = os.getenv("DB_PASSWORD")
+        db_schema = os.getenv("DB_SCHEMA")
         conn = psycopg2.connect(database=db_name, user=db_username, password=db_password, host=db_url,
                                 port="5432")
     else:
         # Heroku
         db_url = os.environ.get("DATABASE_URL", None)
+        db_schema = os.getenv("DB_SCHEMA")
         conn = psycopg2.connect(db_url, sslmode='require')
     cur = conn.cursor()
+
+    # check if table exist
+    cur.execute("select * from information_schema.tables where table_name='items'")
+    if not (bool(cur.rowcount)):
+        cur.execute(f"{db_schema};")
+        conn.commit()
+
     if query[:6].lower() == "select":
         cur.execute(f"{query};")
         result = success(True, result=cur.fetchall())
+    elif query[:6].lower() == "post":
+        cur.execute(f"{query};")
+        conn.commit()
+        id_of_new_row = cur.fetchone()[0]
+        result = success(True, item_id=id_of_new_row)
     else:
         cur.execute(f"{query};")
         conn.commit()
@@ -49,51 +63,52 @@ def success(value, **kwargs):
     return jsonify(result), status_code
 
 
-def create_table():
-    query = "CREATE TABLE test (id serial PRIMARY KEY, num integer, data varchar)"
-    return sql(query)
-
-
-def insert_record():
-    query = "INSERT INTO test2 (num, data) VALUES ('12', 'Test')"
-    return sql(query)
-
-
-def insert_record():
-    query = "INSERT INTO test2 (num, data) VALUES ('12', 'Test')"
-    return sql(query)
-
-
-def select_record():
-    query = "SELECT * FROM test2"
-    return sql(query)
-
-
 @app.route("/")
 def home():
     return render_template("index.html")
 
 
-@app.route("/item_<item_id>", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-def item_action(item_id):
+@app.route("/item", methods=["GET", "POST", "PATCH", "DELETE"])
+def item_action():
     method = request.method.lower()
+    item_id = request.args.get("item_id")
+    laz_link = request.args.get("laz_link")
+    ia_link = request.args.get("ia_link")
+    cat = request.args.get("cat")
     # HTTP POST - Create Record
     if method == "post":
-        result = "Creating new record"
+        result = sql(f"INSERT INTO items (laz_link, ia_link, cat) VALUES ('{laz_link}', '{ia_link}', '{cat}' ) "
+                     f"RETURNING id")
     # HTTP PUT - Update Record
     elif method == "put":
         result = "Updating whole record"
     # HTTP PATCH - Update Record
     elif method == "patch":
-        result = "Updating piece of record"
+        record = sql(f"SELECT * FROM items WHERE id='{item_id}'")
+        cur_laz_link = record[0].json["payload"]["result"][0][1]
+        cur_ia_link = record[0].json["payload"]["result"][0][2]
+        cur_cat = record[0].json["payload"]["result"][0][3]
+        fields = ["laz_link", "ia_link", "cat"]
+        cur_item = [cur_laz_link, cur_ia_link, cur_cat]
+        sent_item = [laz_link, ia_link, cat]
+        for i in range(0, len(cur_item)):
+            if not (cur_item[i].lower() == sent_item[i].lower()):
+                sql(f"UPDATE items SET {fields[i]}='{sent_item[i]}' "
+                    f"WHERE id='{item_id}'")
+
+        result = success(True, item_id=item_id)
     # HTTP DELETE - Delete Record
     elif method == "delete":
-        result = "Deleting the record"
+        result = sql(f"DELETE FROM items WHERE id='{item_id}' "
+                     f"RETURNING id")
     # HTTP GET - Read Record
     else:
-        result = "Displaying record"
-    return success(True, msg=result)
+        if item_id:
+            result = sql(f"SELECT * FROM items WHERE id='{item_id}'")
+        else:
+            result = sql("SELECT * FROM items")
+    return result
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
