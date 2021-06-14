@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template, request
 import os
 import psycopg2
+import urllib.parse
 
 app = Flask(__name__)
 
@@ -14,20 +15,24 @@ def sql(query):
         db_name = os.getenv("DB_NAME")
         db_username = os.getenv("DB_USERNAME")
         db_password = os.getenv("DB_PASSWORD")
-        db_schema = os.getenv("DB_SCHEMA")
+        # db_schema = os.getenv("DB_SCHEMA")
         conn = psycopg2.connect(database=db_name, user=db_username, password=db_password, host=db_url,
                                 port="5432")
     else:
         # Heroku
         db_url = os.environ.get("DATABASE_URL", None)
-        db_schema = os.getenv("DB_SCHEMA")
+        # db_schema = os.getenv("DB_SCHEMA")
         conn = psycopg2.connect(db_url, sslmode='require')
     cur = conn.cursor()
 
-    # check if table exist
+    # check if tables exist
     cur.execute("select * from information_schema.tables where table_name='items'")
     if not (bool(cur.rowcount)):
-        cur.execute(f"{db_schema};")
+        cur.execute(f"CREATE TABLE items (id serial PRIMARY KEY, laz_link text, ia_link text, cat varchar);")
+        conn.commit()
+    cur.execute("select * from information_schema.tables where table_name='quotes'")
+    if not (bool(cur.rowcount)):
+        cur.execute(f"CREATE TABLE quotes (id serial PRIMARY KEY, content text, author text, cat varchar);")
         conn.commit()
 
     if query[:6].lower() == "select":
@@ -68,13 +73,13 @@ def home():
     return render_template("index.html")
 
 
-@app.route("/item", methods=["GET", "POST", "PATCH", "DELETE"])
-def item_action():
+@app.route("/items", methods=["GET", "POST", "PATCH", "DELETE"])
+def items_action():
     method = request.method.lower()
     item_id = request.args.get("item_id")
     laz_link = request.args.get("laz_link")
     ia_link = request.args.get("ia_link")
-    cat = request.args.get("cat")
+    cat = urllib.parse.quote(request.args.get("cat"))
     # HTTP POST - Create Record
     if method == "post":
         result = sql(f"INSERT INTO items (laz_link, ia_link, cat) VALUES ('{laz_link}', '{ia_link}', '{cat}' ) "
@@ -107,6 +112,49 @@ def item_action():
             result = sql(f"SELECT * FROM items WHERE id='{item_id}'")
         else:
             result = sql("SELECT * FROM items")
+    return result
+
+
+@app.route("/quotes", methods=["GET", "POST", "PATCH", "DELETE"])
+def quotes_action():
+    method = request.method.lower()
+    quote_id = request.args.get("quote_id")
+    content = urllib.parse.quote(request.args.get("content"))
+    author = urllib.parse.quote(request.args.get("author"))
+    cat = urllib.parse.quote(request.args.get("cat"))
+    # HTTP POST - Create Record
+    if method == "post":
+        result = sql(f"INSERT INTO quotes (content, author, cat) VALUES ('{content}', '{author}', '{cat}' ) "
+                     f"RETURNING id")
+    # HTTP PUT - Update Record
+    elif method == "put":
+        result = "Updating whole record"
+    # HTTP PATCH - Update Record
+    elif method == "patch":
+        record = sql(f"SELECT * FROM quotes WHERE id='{quote_id}'")
+        cur_content = record[0].json["payload"]["result"][0][1]
+        cur_author = record[0].json["payload"]["result"][0][2]
+        cur_cat = record[0].json["payload"]["result"][0][3]
+        fields = ["content", "author", "cat"]
+        cur_item = [cur_content, cur_author, cur_cat]
+        sent_item = [content, author, cat]
+        for i in range(0, len(cur_item)):
+            # print(f"{cur_item[i].lower()} {sent_item[i].lower()}")
+            if not (cur_item[i].lower() == sent_item[i].lower()):
+                sql(f"UPDATE quotes SET {fields[i]}='{sent_item[i]}' "
+                    f"WHERE id='{quote_id}'")
+
+        result = success(True, item_id=quote_id)
+    # HTTP DELETE - Delete Record
+    elif method == "delete":
+        result = sql(f"DELETE FROM quotes WHERE id='{quote_id}' "
+                     f"RETURNING id")
+    # HTTP GET - Read Record
+    else:
+        if quote_id:
+            result = sql(f"SELECT * FROM quotes WHERE id='{quote_id}'")
+        else:
+            result = sql("SELECT * FROM quotes")
     return result
 
 
