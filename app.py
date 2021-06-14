@@ -79,7 +79,11 @@ def items_action():
     item_id = request.args.get("item_id")
     laz_link = request.args.get("laz_link")
     ia_link = request.args.get("ia_link")
-    cat = urllib.parse.quote(request.args.get("cat"))
+    cat = ""
+    try:
+        cat = urllib.parse.quote(request.args.get("cat"))
+    except TypeError as e:
+        print(e)
     # HTTP POST - Create Record
     if method == "post":
         result = sql(f"INSERT INTO items (laz_link, ia_link, cat) VALUES ('{laz_link}', '{ia_link}', '{cat}' ) "
@@ -89,6 +93,8 @@ def items_action():
         result = "Updating whole record"
     # HTTP PATCH - Update Record
     elif method == "patch":
+        if item_id is None:
+            return success(False, msg="Missing required parameter(s) 'item_id'")
         record = sql(f"SELECT * FROM items WHERE id='{item_id}'")
         cur_laz_link = record[0].json["payload"]["result"][0][1]
         cur_ia_link = record[0].json["payload"]["result"][0][2]
@@ -104,6 +110,8 @@ def items_action():
         result = success(True, item_id=item_id)
     # HTTP DELETE - Delete Record
     elif method == "delete":
+        if item_id is None:
+            return success(False, msg="Missing required parameter(s) 'item_id'")
         result = sql(f"DELETE FROM items WHERE id='{item_id}' "
                      f"RETURNING id")
     # HTTP GET - Read Record
@@ -119,11 +127,27 @@ def items_action():
 def quotes_action():
     method = request.method.lower()
     quote_id = request.args.get("quote_id")
-    content = urllib.parse.quote(request.args.get("content"))
-    author = urllib.parse.quote(request.args.get("author"))
-    cat = urllib.parse.quote(request.args.get("cat"))
+    content = ""
+    author = ""
+    cat = ""
+
+    try:
+        content = urllib.parse.quote(request.args.get("content"))
+    except TypeError as e:
+        print(e)
+    try:
+        author = urllib.parse.quote(request.args.get("author"))
+    except TypeError as e:
+        print(e)
+    try:
+        cat = urllib.parse.quote(request.args.get("cat"))
+    except TypeError as e:
+        print(e)
+
     # HTTP POST - Create Record
     if method == "post":
+        if content == "":
+            return success(False, msg="Missing required parameter(s) 'content'")
         result = sql(f"INSERT INTO quotes (content, author, cat) VALUES ('{content}', '{author}', '{cat}' ) "
                      f"RETURNING id")
     # HTTP PUT - Update Record
@@ -131,6 +155,8 @@ def quotes_action():
         result = "Updating whole record"
     # HTTP PATCH - Update Record
     elif method == "patch":
+        if quote_id is None:
+            return success(False, msg="Missing required parameter(s) 'quote_id'")
         record = sql(f"SELECT * FROM quotes WHERE id='{quote_id}'")
         cur_content = record[0].json["payload"]["result"][0][1]
         cur_author = record[0].json["payload"]["result"][0][2]
@@ -147,6 +173,8 @@ def quotes_action():
         result = success(True, item_id=quote_id)
     # HTTP DELETE - Delete Record
     elif method == "delete":
+        if quote_id is None:
+            return success(False, msg="Missing required parameter(s) 'quote_id'")
         result = sql(f"DELETE FROM quotes WHERE id='{quote_id}' "
                      f"RETURNING id")
     # HTTP GET - Read Record
