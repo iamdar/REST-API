@@ -127,6 +127,7 @@ def items_action():
 def quotes_action():
     method = request.method.lower()
     quote_id = request.args.get("quote_id")
+    quote_all = request.args.get("quote_all")
     content = ""
     author = ""
     cat = ""
@@ -181,8 +182,10 @@ def quotes_action():
     else:
         if quote_id:
             result = sql(f"SELECT * FROM quotes WHERE id='{quote_id}'")
-        else:
+        if quote_all:
             result = sql("SELECT * FROM quotes")
+        else:
+            result = sql("SELECT * FROM quotes ORDER BY RANDOM() LIMIT 1")
     return result
 
 
