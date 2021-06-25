@@ -26,6 +26,10 @@ def sql(query):
     cur = conn.cursor()
 
     # check if tables exist
+    cur.execute("select * from information_schema.tables where table_name='videos'")
+    if not (bool(cur.rowcount)):
+        cur.execute(f"CREATE TABLE videos (id serial PRIMARY KEY, page_id text, post_id text);")
+        conn.commit()
     cur.execute("select * from information_schema.tables where table_name='items'")
     if not (bool(cur.rowcount)):
         cur.execute(f"CREATE TABLE items (id serial PRIMARY KEY, laz_link text, ia_link text, cat varchar);")
@@ -186,6 +190,58 @@ def quotes_action():
             result = sql("SELECT * FROM quotes")
         else:
             result = sql("SELECT * FROM quotes ORDER BY RANDOM() LIMIT 1")
+    return result
+
+
+@app.route("/videos", methods=["GET", "POST", "PATCH", "DELETE"])
+def videos_action():
+    method = request.method.lower()
+    video_id = request.args.get("videos_id")
+    page_id = request.args.get("page_id")
+    post_id = request.args.get("post_id")
+
+    # HTTP POST - Create Record
+    if method == "post":
+        result = sql(f"INSERT INTO videos (page_id, post_id) VALUES ('{page_id}', '{post_id}' ) "
+                     f"RETURNING id")
+    # HTTP PUT - Update Record
+    elif method == "put":
+        result = "Updating whole record"
+    # HTTP PATCH - Update Record
+    elif method == "patch":
+        if video_id is None:
+            return success(False, msg="Missing required parameter(s) 'video_id'")
+        record = sql(f"SELECT * FROM videos WHERE id='{video_id}'")
+        cur_page_id = record[0].json["payload"]["result"][0][1]
+        cur_post_id = record[0].json["payload"]["result"][0][2]
+        fields = ["page_id", "post_id"]
+        cur_item = [cur_page_id, cur_post_id]
+        sent_item = [page_id, post_id]
+        for i in range(0, len(cur_item)):
+            if not (cur_item[i].lower() == sent_item[i].lower()):
+                sql(f"UPDATE videos SET {fields[i]}='{sent_item[i]}' "
+                    f"WHERE id='{video_id}'")
+
+        result = success(True, item_id=video_id)
+    # HTTP DELETE - Delete Record
+    elif method == "delete":
+        if video_id is None:
+            return success(False, msg="Missing required parameter(s) 'video_id'")
+        result = sql(f"DELETE FROM videos WHERE id='{video_id}' "
+                     f"RETURNING id")
+    # HTTP GET - Read Record
+    else:
+        q = None
+        try:
+            q = request.args.get("q")
+        except:
+            pass
+        if video_id:
+            result = sql(f"SELECT * FROM videos WHERE id='{video_id}'")
+        elif page_id and post_id:
+            result = sql(f"SELECT * FROM videos WHERE page_id='{page_id}' AND post_id='{post_id}'")
+        else:
+            result = sql("SELECT * FROM videos")
     return result
 
 
